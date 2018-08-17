@@ -1,7 +1,7 @@
 #!/bin/sh
 
 ########################################
-# VERSION:  GIT'ified
+# VERSION:  GIT'ified - now for work at deloitte
 # UPDATED:  11/03/2018
 # DESCRIP:  local sync (and rolling snapshot) of a nominated CIFS/SMB network share
 #   NOTES:  this has been setup initially for CBA gig sync. To add to this, just duplicate ### lines with new target
@@ -15,17 +15,23 @@
 # TO DO:
 #m - handle multiple mounts... should be ok cause CreateTmpMountFileAndArray filters on IP... so wont be multiple for 10.208.83.106
 
-#GLOBAL VARIABLES (ANNOYING, BUT BASH FORCED MY HAND).
+#GLOBAL VARIABLES (ANNOYING, BUT ....)
 O2GIG=""
 DAYSOLD=""
 
-source /_LOCALDATA/_PROGDATA/SCRIPTS/__CONFIG/telstra.conf
+source /_KEIRAN/_SCRIPTS/__CONFIG/bigD.conf
 
 USERNAME=$CONF_USERNAME
-PASS=$CONF_PASS
-O2SHAREIP=$CONF_O2SHAREIP
-O2SHARENAME=$CONF_O2SHARENAME
+PASS=$CONF_PASSWORD
+SHAREHOST01=$CONF_SHAREHOST01
+SHAREFULLPATH01=$CONF_SHAREFULLPATH01
+#SPLIT THE FULL PATH, OSX ONLY CREATES THE MOUNT POINT AS THE FINAL FOLDER NAME (ARRAY ELEMENT 01)
+ar_SHAREFULLPATH01=(${SHAREFULLPATH01//\// })
+SHARELEAFFOLDER=${ar_SHAREFULLPATH01[1]}
 
+#IPs TO PING
+GOOGLEHOST="8.8.8.8"
+DELOITTEHOST="10.43.96.1"
 
 declare -a ARGUMENTS            #if user enters multiple choices in menu, they are stored here
 declare -a CURRENTMOUNTS        #array of our current mounts (as this program sees them).
@@ -48,26 +54,42 @@ CreateTmpMountFileAndArray () {
 #DISPLAY A MENU
 PrintMenu () {
     #GET LAST SYNC TIME FROM FILE
-    while IFS='' read -r line || [[ -n "$line" ]]; do
-        LASTSYNCTIME="$line"
-    done < "/_LOCALDATA/K-WORK/_UNISON-SYNC/_$O2GIG/timestamp.txt"
+#    while IFS='' read -r line || [[ -n "$line" ]]; do
+#        LASTSYNCTIME="$line"
+#    done < "/_LOCALDATA/K-WORK/_UNISON-SYNC/_$O2GIG/timestamp.txt"
 
     #GET LAST SNAP TIME FROM FILE
-    while IFS='' read -r line || [[ -n "$line" ]]; do
-        LASTSNAPTIME="$line"
-    done < "/_LOCALDATA/_SNAPSHOTS/_LANSYNC/_$O2GIG/timestamp.txt"
+#    while IFS='' read -r line || [[ -n "$line" ]]; do
+#        LASTSNAPTIME="$line"
+#    done < "/_LOCALDATA/_SNAPSHOTS/_LANSYNC/_$O2GIG/timestamp.txt"
 
     clear
-    echo "---------- Welcome to the kSYNC Program ----------"
+#    printf '%s\n' "${ar_SHAREFULLPATH01[@]}"
+#    printf "${ar_SHAREFULLPATH01[1]}"
+#    printf "$SHAREBASEMOUNTPT01"
+#    echo $SHARELEAFFOLDER
+
+    echo "---------- Welcome to the kMENU Program ----------"
     echo "|                                                |"
-    echo "| O2 CUSTOMER:: $O2GIG                              |"
+#    echo "| O2 CUSTOMER:: $O2GIG                              |"
+#    echo "|                                                |"
+#    echo "|  (uf) unison-full  [last sync: $LASTSYNCTIME]  |"
+#    echo "|  (uc) unison-curr  [last sync: $LASTSYNCTIME]  |"
+#    echo "|  ( s) snapshot-bak [last snap: $LASTSNAPTIME]  |"
+
+    echo "|  (sk) sync     smb://ausyd0800/users$/keharris |"
     echo "|                                                |"
-    echo "|  (uf) unison-full  [last sync: $LASTSYNCTIME]  |"
-    echo "|  (uc) unison-curr  [last sync: $LASTSYNCTIME]  |"
-    echo "|  ( s) snapshot-bak [last snap: $LASTSNAPTIME]  |"
-    echo "|                                                |"
-    echo "|  ( m) mount                                    |"
+    echo "|  (mk) mount    smb://ausyd0800/users$/keharris |"
     echo "|  ( d) dismount                                 |"
+    echo "|                                                |"
+    echo "|  (pg) ping google   (8.8.8.8)                  |"
+    echo "|  (pd) ping deloitte (10.43.96.1)               |"
+    echo "|                                                |"
+    echo "|  <st> speedtest                                |"
+    echo "|  <mb> mount bex    smb://10.10.10.5/           |"
+    echo "|  < b> backup AU10822                           |"
+    echo "|  <vk> virus scanner kill                       |"
+    echo "|  <vs> virus scanner start                      |"
     echo "|                                                |"
     echo "|  ( r) refresh (this screen)                    |"
     echo "|                                                |"
@@ -109,18 +131,22 @@ ReadMenuInput () {
 #HANDLES ALL THE VALID MENU INPUT
 ProcessMenuCommand () {
     case $1 in
-        uf)  MountSyncDismount "_$O2GIG"
+        sk) RsyncExpenses
+            MountSyncDismount "_$SHARELEAFFOLDER"
 #            Snapshot "_$O2GIG"
             ;;
-        uc)  MountSyncDismount "_$O2GIG" "c"  #'c' in argument $2 is the 'current' flag
+        uc) MountSyncDismount "_$O2GIG" "c"  #'c' in argument $2 is the 'current' flag
 #            Snapshot "_$O2GIG"
             ;;
-
         s)  SnapshotBakAndRotate "_$O2GIG"
             ;;
-        m)  ProcessMountLogic "${O2SHARENAME}"
+        mk) ProcessMountLogic "${SHAREFULLPATH01}"
             ;;
         d)  unmountNum=1 ; Unmount $unmountNum
+            ;;
+        pg) pingToHost "$GOOGLEHOST"
+            ;;
+        pd) pingToHost "$DELOITTEHOST"
             ;;
         r)  continue
             ;;
@@ -134,8 +160,19 @@ ProcessMenuCommand () {
 
 #--------------------------------------------------------------------------------
 #IS HOST PINGING? $1=NAS-NAME/IP
+pingToHost () {
+    ping -c 4 $1
+#    if [[ $? -eq 0 ]]; then
+#        return 0        #healthy return
+#    else
+#        return 99       #failure return
+#    fi
+}
+#--------------------------------------------------------------------------------
+#IS HOST PINGING? $1=NAS-NAME/IP
 CheckHostIsPinging () {
-    ping -c 1 -t 1 $1 &> /dev/null
+    #ping -c 1 -t 1 $1 &> /dev/null         #IF USING STANDARD OSX PING
+    ping -c 1 -w 1 $1 &> /dev/null          #IF USING PING FROM INETUTILS (t -> w)
     if [[ $? -eq 0 ]]; then
         return 0        #healthy return
     else
@@ -146,8 +183,8 @@ CheckHostIsPinging () {
 #IS DRIVE ALREADY MOUNTED? $1=SHARENAME
 CheckForExistingMounting () {
     #MOUNT_SMBFS COMMAND NEEDS SPECIAL CHARS REPLACED (SPACE IN SHARENAME WITH %20, ! IN PASSWORD WITH %21)
-    O2SHARENAMEWITHMOUNTESC="${1// /%20}"
-    mount | grep $O2SHARENAMEWITHMOUNTESC > /dev/null
+    SHAREFULLPATH01WITHMOUNTESC="${1// /%20}"
+    mount | grep $SHAREFULLPATH01WITHMOUNTESC > /dev/null
     if [[ $? -eq 0 ]]; then
         return 0        #healthy return
     else
@@ -156,26 +193,31 @@ CheckForExistingMounting () {
 }
 
 #--------------------------------------------------------------------------------
-#CREATE LOCAL MOUNT DIR AND MOUNT THE REMOTE SHARE TO IT. $1=O2SHAREIP $2=O2SHARENAME $3=USERNAME $4=PASS
+#CREATE LOCAL MOUNT DIR AND MOUNT THE REMOTE SHARE TO IT. $1=SHAREHOST01 $2=SHAREFULLPATH01 $3=USERNAME $4=PASS $5=SHARELEAFFOLDER
 MountHost () {
-    MOUNTPOINT="/Volumes/${2}"
+    #SPLIT THE FULL PATH, OSX ONLY CREATES THE MOUNT POINT AS THE FINAL FOLDER NAME (ARRAY ELEMENT 01)
+#    ar_SHAREFULLPATH=(${2//\// })
+#    SHARELEAFFOLDER=${ar_SHAREFULLPATH[1]}
 
-    #MOUNT_SMBFS COMMAND NEEDS SPECIAL CHARS REPLACED (SPACE IN SHARENAME WITH %20, ! IN PASSWORD WITH %21)
-    O2SHARENAMEWITHMOUNTESC="${2// /%20}"
+    MOUNTPOINT="/Volumes/${5}"
+
+    #MOUNT_SMBFS COMMAND NEEDS SPECIAL CHARS REPLACED (! IN PASSWORD WITH %21)
+#    SHAREFULLPATH01WITHMOUNTESC="${2// /%20}"
     PASSWITHMOUNTESC="${4//!/%21}"
 
     #CHECK IF LOCAL MOUNT DIRECTORY EXISTS, IF IT DOESNT, CREATE IT
-    if [[ -d /Volumes/$2 ]]; then
+    if [[ -d /Volumes/$5 ]]; then
         echo "local mount point exists, continuing..."
     else
-        echo "local mount point /Volumes/$2 doesn't exist, creating..."
-        sudo chmod 777 /Volumes/    #NB: on sierra, this requires adding the following to /etc/sudoers   :    keiran_harris ALL = NOPASSWD: /bin/chmod
+        echo "local mount point /Volumes/$5 doesn't exist, creating..."
+        sudo chmod 777 /Volumes/    #NB: on sierra, this requires adding the following to /etc/sudoers   :    keharris ALL = NOPASSWD: /bin/chmod
         mkdir "${MOUNTPOINT}"       #NB: if this mkdir fails (like it did in 10.12 sierra upgrade) you need to: "sudo chmod 777 /Volumes/"
     fi
     #ATTEMPT TO MOUNT THE REMOTE FS
     #NB: correct CLI syntax is:  "mount_smbfs //c920835:<<pass>>@10.208.83.106/O2%20Fileshare /Volumes/O2\ Fileshare"
     echo "Attempting to Mount..."
-    mount_smbfs "//${3}:${4}@${1}/${O2SHARENAMEWITHMOUNTESC}"  "/Volumes/${2}"
+#    echo mount_smbfs "//${3}:${4}@${1}/${SHAREFULLPATH01WITHMOUNTESC}"  "/Volumes/${5}"
+    mount_smbfs "//${3}:${4}@${1}/${SHAREFULLPATH01WITHMOUNTESC}"  "/Volumes/${5}"
 
     if [[ $? -eq 0 ]]; then
         echo "Mount Success!"
@@ -189,10 +231,10 @@ MountHost () {
 #CORE MOUNTING LOGIC (PING CHECK, ALREADY MOUNTED ETC). $1=SHARENAME (ALL OTHER $ ARE GLOBALS)
 ProcessMountLogic () {
     echo "share $1 selected..."
-    CheckHostIsPinging $O2SHAREIP
+    CheckHostIsPinging $SHAREHOST01
     #WAS THE PING HEALTH-CHECK OK?
     if [[ $? -eq 0 ]]; then
-        echo "host $O2SHAREIP is pinging, checking mounting...."
+        echo "host $SHAREHOST01 is pinging, checking mounting...."
         CheckForExistingMounting "${1}"
         #ALREADY MOUNTED?
         if [[ $? -eq 0 ]]; then
@@ -200,13 +242,13 @@ ProcessMountLogic () {
         #NOT YET MOUNTED
         else
             echo "not mounted, attempting to mount..."
-            MountHost $O2SHAREIP "${O2SHARENAME}" $USERNAME "${PASS}"
+            MountHost $SHAREHOST01 "${SHAREFULLPATH01}" $USERNAME "${PASS}" $SHARELEAFFOLDER
             #WAS THE MOUNT SUCCESSFUL?
             if [[ $? -eq 0 ]]; then
                 #ALL GOOD, CREATE TMP FILE AND ARRAY
                 echo "mounted OK."
                 say "mownting OK"        #ozzie pronunciation!
-                CreateTmpMountFileAndArray $O2SHAREIP
+                CreateTmpMountFileAndArray $SHAREHOST01
             else
                 #CLEANUP FAILED MOUNT
                 read -p "WARNING: mount failed! Removing /Volumes/$1 [hit enter to ack]"
@@ -215,7 +257,7 @@ ProcessMountLogic () {
         fi
     #CANT EVEN PING
     else
-        read -p "WARNING: host $O2SHAREIP is NOT pinging, aborting! [hit enter to ack]"
+        read -p "WARNING: host $SHAREHOST01 is NOT pinging, aborting! [hit enter to ack]"
         exit
     fi
     #sleep 1
@@ -228,7 +270,7 @@ MountSyncDismount() {
     echo ""
     echo "--MOUNTING--"
     say "mownting"  &   #continue code execution with &, ozzie pronunciation!
-    ProcessMountLogic "${O2SHARENAME}"
+    ProcessMountLogic "${SHAREFULLPATH01}"
     PrintMenu
 
     #CALL UNISON, TIMESTAMP IT WITH A .TS TEXT FILE IN THE SYNC ROOT
@@ -243,7 +285,7 @@ MountSyncDismount() {
     fi
     unison $PRFFILE
     TIMESTAMP=`date "+%Y%m%d-%H%M"`
-    UNISONTS="/_LOCALDATA/K-WORK/_UNISON-SYNC/$1/timestamp.txt"
+    UNISONTS="/_KEIRAN/_K-DOCS/_D-WORK/_UNISON-SYNC/$1/timestamp.txt"
     touch $UNISONTS
     echo "$TIMESTAMP" > $UNISONTS
     say "$1 sync complete"
@@ -309,6 +351,11 @@ LastSnapshotWasToday () {
     else
         return 0
     fi
+}
+
+RsyncExpenses () {
+    echo ""
+    echo "RSYNCing gdrive expenses... " ; rsync  -av --del  /_KEIRAN/_K-DOCS/_K-GDRIVE/ScannerPro/    /_KEIRAN/_K-DOCS/_D-WORK/_DELIVERY/_UNISON-SYNC/_keharris/_EXPENSES
 }
 
 SnapshotBakAndRotate () {
@@ -392,7 +439,7 @@ O2GIG="$1"
 O2GIG=$(echo $O2GIG | tr 'a-z' 'A-Z')
 
 while true; do
-    CreateTmpMountFileAndArray $O2SHARENAME
+    CreateTmpMountFileAndArray $SHAREFULLPATH01
     PrintMenu
     ReadMenuInput
     #MAKE SURE ALL IS OK WITH INPUT BEFORE PROCEEDING, 99 FLAGS AN ISSUE
