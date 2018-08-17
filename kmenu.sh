@@ -84,12 +84,13 @@ PrintMenu () {
     echo "|                                                |"
     echo "|  (pg) ping google   (8.8.8.8)                  |"
     echo "|  (pd) ping deloitte (10.43.96.1)               |"
+    echo "|  (st) speedtest                                |"
     echo "|                                                |"
-    echo "|  <st> speedtest                                |"
     echo "|  <mb> mount bex    smb://10.10.10.5/           |"
     echo "|  < b> backup AU10822                           |"
-    echo "|  <vk> virus scanner kill                       |"
-    echo "|  <vs> virus scanner start                      |"
+    echo "|                                                |"
+    echo "|  (vk) virus scanner kill                       |"
+    echo "|  (vs) virus scanner status                     |"
     echo "|                                                |"
     echo "|  ( r) refresh (this screen)                    |"
     echo "|                                                |"
@@ -144,9 +145,15 @@ ProcessMenuCommand () {
             ;;
         d)  unmountNum=1 ; Unmount $unmountNum
             ;;
+        st) SpeedTest
+            ;;
         pg) pingToHost "$GOOGLEHOST"
             ;;
         pd) pingToHost "$DELOITTEHOST"
+            ;;
+        vk) VirusOp "kill"
+            ;;
+        vs) VirusOp "status"
             ;;
         r)  continue
             ;;
@@ -157,7 +164,22 @@ ProcessMenuCommand () {
             ;;
     esac
 }
-
+#--------------------------------------------------------------------------------
+SpeedTest () {
+    speedtest-cli
+    read -p "[hit enter to return to menu]"
+}
+#--------------------------------------------------------------------------------
+VirusOp () {
+    if [[ $1 == "kill" ]]; then
+        sudo /usr/local/McAfee/AntiMalware/VSControl stopoas
+        sudo /usr/local/McAfee/AntiMalware/VSControl stop
+    fi
+    if [[ $1 == "status" ]]; then
+        sudo /usr/local/McAfee/AntiMalware/VSControl status
+    fi
+    sleep 3
+}
 #--------------------------------------------------------------------------------
 #IS HOST PINGING? $1=NAS-NAME/IP
 pingToHost () {
