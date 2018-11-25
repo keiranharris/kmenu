@@ -87,7 +87,8 @@ PrintMenu () {
     echo "|  (st) speedtest                                |"
     echo "|                                                |"
     echo "|  <mb> mount bex    smb://10.10.10.5/           |"
-    echo "|  < b> backup AU10822                           |"
+    echo "|                                                |"
+    echo "|  (bh) backup AU10822 to HDD                    |"
     echo "|                                                |"
     echo "|  (vk) virus scanner kill                       |"
     echo "|  (vs) virus scanner status                     |"
@@ -147,6 +148,8 @@ ProcessMenuCommand () {
             ;;
         st) SpeedTest
             ;;
+        bh) BuildRsyncCmd "kdata-work"
+            ;;
         pg) pingToHost "$GOOGLEHOST"
             ;;
         pd) pingToHost "$DELOITTEHOST"
@@ -164,6 +167,26 @@ ProcessMenuCommand () {
             ;;
     esac
 }
+
+#--------------------------------------------------------------------------------
+BuildRsyncCmd () {
+    KLOG=`date "+/Volumes/K_1TB/_RSYNC-BACKUPS/__LOGS/%Y%m%d-%H%M_$1.txt"`
+    case $1 in
+        kdata-work)
+		#KNOTES: -L to follow symlinks
+    # insert '--dry-run' into args to test
+            KARG=' -L -av --del  --exclude-from /_KEIRAN/_SCRIPTS/__CONFIG/rsync_k_exclude.conf '
+            KSRC=' /_KEIRAN/ '
+            KDST=' /Volumes/K_1TB/_RSYNC-BACKUPS/_AU10822/ '
+            echo "Performing rsync of [$KSRC] to [$KDST] \n....redirecting output to [$KLOG]"
+#echo "rsync $KARG $KSRC $KDST | grep -v '/$'"
+            rsync $KARG $KSRC $KDST | grep -v '/$' 2>&1  >  $KLOG
+            ;;
+    esac
+    say "backup complete"
+    read -p "Backup DONE.... [hit enter to return to menu]"
+}
+
 #--------------------------------------------------------------------------------
 SpeedTest () {
     speedtest-cli
