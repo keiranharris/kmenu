@@ -100,6 +100,7 @@ PrintMenu () {
     echo "|                                                   |"
     echo "|  (bh) backup AU10822 to HDD (K_1TB)               |"
     echo "|                                                   |"
+    echo "|  (ck) CyOptics kill                               |"
     echo "|  (vk) virus scanner kill                          |"
     echo "|  (vs) virus scanner status                        |"
     echo "|                                                   |"
@@ -170,6 +171,8 @@ ProcessMenuCommand () {
             ;;
         pd) pingToHost "$DELOITTEHOST"
             ;;
+        ck) VirusOp "CyOptics"
+            ;;
         vk) VirusOp "kill"
             ;;
         vs) VirusOp "status"
@@ -216,6 +219,9 @@ VirusOp () {
     fi
     if [[ $1 == "status" ]]; then
         sudo /usr/local/McAfee/AntiMalware/VSControl status
+    fi
+    if [[ $1 == "CyOptics" ]]; then
+        sudo killall -HUP CyOptics
     fi
     sleep 3
 }
